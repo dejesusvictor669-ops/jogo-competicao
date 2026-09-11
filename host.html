@@ -8,6 +8,7 @@
 </head>
 <body>
   <div class="wrap wide">
+    <a href="index.html" class="muted" style="text-decoration:none; display:inline-block; margin-bottom:14px;">← Início</a>
     <h1 class="display" style="font-size:26px; margin-bottom: 20px;">Painel do host</h1>
 
     <!-- ETAPA 1: criar sala -->
@@ -64,6 +65,7 @@
       </div>
 
       <button id="btn-add-challenge" class="ghost" style="margin-top:16px;">+ Adicionar desafio</button>
+      <button id="btn-cancel-edit" class="secondary" style="margin-top:8px; display:none;">Cancelar edição</button>
 
       <div style="margin-top:22px;">
         <button id="btn-open-room" disabled style="width:100%;">Abrir sala para os alunos</button>
@@ -107,6 +109,7 @@
     <section id="step-finished" class="card" style="display:none;">
       <h2 class="center" style="font-size:22px;">🏆 Resultado final</h2>
       <div id="final-leaderboard" style="margin-top:16px;"></div>
+      <button id="btn-new-game" style="width:100%; margin-top:20px;">Iniciar novo jogo</button>
     </section>
   </div>
 
@@ -119,6 +122,7 @@
     let timerInterval = null;
     let answersChannel = null;
     let playersChannel = null;
+    let editingChallengeId = null;
 
     const $ = (id) => document.getElementById(id);
     const show = (id) => { $(id).style.display = "block"; };
@@ -163,20 +167,57 @@
 
       const pontos = parseInt($("c-pontos").value, 10) || 10;
       const tempo = parseInt($("c-tempo").value, 10) || 30;
+      const payload = { type, pergunta, opcoes: opcoes, resposta_correta: correta, pontos, tempo_segundos: tempo };
 
-      const { data, error } = await supa.from("challenges").insert({
-        room_id: room.id,
-        order_index: challenges.length,
-        type, pergunta,
-        opcoes: opcoes,
-        resposta_correta: correta,
-        pontos, tempo_segundos: tempo,
-      }).select().single();
+      if (editingChallengeId) {
+        const { data, error } = await supa.from("challenges").update(payload)
+          .eq("id", editingChallengeId).select().single();
+        if (error) { alert("Erro ao salvar edição: " + error.message); return; }
+        const idx = challenges.findIndex(c => c.id === editingChallengeId);
+        if (idx !== -1) challenges[idx] = data;
+        cancelEdit();
+      } else {
+        const { data, error } = await supa.from("challenges").insert({
+          room_id: room.id,
+          order_index: challenges.length,
+          ...payload,
+        }).select().single();
+        if (error) { alert("Erro ao salvar desafio: " + error.message); return; }
+        challenges.push(data);
+      }
 
-      if (error) { alert("Erro ao salvar desafio: " + error.message); return; }
-      challenges.push(data);
       renderChallengeList();
+      $("c-pergunta").value = ""; $("c-op-1").value = ""; $("c-op-2").value = "";
+      $("c-op-3").value = ""; $("c-op-4").value = ""; $("c-correta").value = "";
+      $("c-type").value = "multipla";
+      $("c-opcoes-wrap").style.display = "block";
+    });
 
+    function editChallenge(id) {
+      const c = challenges.find(ch => ch.id === id);
+      if (!c) return;
+      editingChallengeId = id;
+      $("c-type").value = c.type;
+      $("c-opcoes-wrap").style.display = c.type === "multipla" ? "block" : "none";
+      $("c-pergunta").value = c.pergunta;
+      const ops = c.opcoes || [];
+      $("c-op-1").value = ops[0] || ""; $("c-op-2").value = ops[1] || "";
+      $("c-op-3").value = ops[2] || ""; $("c-op-4").value = ops[3] || "";
+      $("c-correta").value = c.resposta_correta || "";
+      $("c-pontos").value = c.pontos;
+      $("c-tempo").value = c.tempo_segundos;
+      $("btn-add-challenge").textContent = "Salvar alterações";
+      $("btn-cancel-edit").style.display = "block";
+      $("c-pergunta").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function cancelEdit() {
+      editingChallengeId = null;
+      $("btn-add-challenge").textContent = "+ Adicionar desafio";
+      $("btn-cancel-edit").style.display = "none";
+    }
+    $("btn-cancel-edit").addEventListener("click", () => {
+      cancelEdit();
       $("c-pergunta").value = ""; $("c-op-1").value = ""; $("c-op-2").value = "";
       $("c-op-3").value = ""; $("c-op-4").value = ""; $("c-correta").value = "";
     });
@@ -188,6 +229,7 @@
         <div class="answer-row">
           <span class="answer-text">${i+1}. [${c.type}] ${c.pergunta}</span>
           <span class="pill">${c.pontos} pts · ${c.tempo_segundos}s</span>
+          <button class="ghost" style="padding:6px 10px; font-size:12px;" onclick="editChallenge('${c.id}')">Editar</button>
         </div>
       `).join("");
     }
@@ -333,6 +375,16 @@
         </div>
       `).join("");
       goTo("step-finished");
+    });
+
+    $("btn-new-game").addEventListener("click", () => {
+      if (playersChannel) supa.removeChannel(playersChannel);
+      if (answersChannel) supa.removeChannel(answersChannel);
+      room = null; challenges = []; activeChallenge = null; editingChallengeId = null;
+      clearInterval(timerInterval);
+      $("host-name").value = "";
+      renderChallengeList();
+      goTo("step-create");
     });
   </script>
 </body>
