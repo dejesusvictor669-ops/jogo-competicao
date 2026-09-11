@@ -1,6 +1,7 @@
 // ⚠️ Troque pelos dados do SEU projeto Supabase (Project Settings > API).
 const SUPABASE_URL = "https://proqcizcgwxvjmkeaqwh.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_wX7n8Xsf-yVNV6FLbhMpHA_fzWaFVqx";
+
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function generateRoomCode() {
