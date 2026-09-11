@@ -1,0 +1,178 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --navy-deep: #101B33;
+  --navy-surface: #1A2A4E;
+  --navy-surface-2: #24386B;
+  --amber: #FFB020;
+  --teal: #3FD6C0;
+  --coral: #FF6B5E;
+  --ink: #EDEFF6;
+  --muted: #93A2C4;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% -10%, #1D3163 0%, var(--navy-deep) 55%);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.45;
+}
+
+h1, h2, h3, .display {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+
+.wrap.wide { max-width: 1080px; }
+
+.card {
+  background: var(--navy-surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.room-code {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  text-align: center;
+}
+
+button, .btn {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  border: none;
+  border-radius: 10px;
+  padding: 13px 18px;
+  cursor: pointer;
+  background: var(--amber);
+  color: #1A1100;
+  transition: transform .08s ease, opacity .15s ease;
+}
+button:hover { opacity: .92; }
+button:active { transform: scale(.98); }
+button.secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid rgba(255,255,255,0.18);
+}
+button.ghost {
+  background: rgba(255,255,255,0.06);
+  color: var(--ink);
+}
+button:disabled { opacity: .4; cursor: not-allowed; }
+
+input, select, textarea {
+  width: 100%;
+  background: var(--navy-deep);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: inherit;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+label:first-child { margin-top: 0; }
+
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+
+.pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  color: var(--muted);
+}
+.pill.live { background: rgba(63,214,192,0.16); color: var(--teal); }
+.pill.waiting { background: rgba(255,176,32,0.16); color: var(--amber); }
+
+.timer {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 44px;
+  font-weight: 700;
+  text-align: center;
+}
+.timer.low { color: var(--coral); }
+
+.option-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--navy-surface-2);
+  color: var(--ink);
+  padding: 16px;
+  margin-bottom: 10px;
+  font-size: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.option-btn.selected { border-color: var(--teal); background: rgba(63,214,192,0.14); }
+.option-btn.correct { border-color: var(--teal); background: rgba(63,214,192,0.22); }
+.option-btn.wrong { border-color: var(--coral); background: rgba(255,107,94,0.18); }
+
+.leaderboard-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.leaderboard-row:last-child { border-bottom: none; }
+.leaderboard-rank {
+  font-family: 'Space Grotesk', sans-serif;
+  color: var(--muted);
+  width: 28px;
+  display: inline-block;
+}
+.leaderboard-points {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: var(--amber);
+}
+
+.muted { color: var(--muted); font-size: 14px; }
+.center { text-align: center; }
+
+.answer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.answer-row:last-child { border-bottom: none; }
+.answer-text { flex: 1; }

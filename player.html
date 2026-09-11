@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Jogar — Jogo da Turma</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <!-- ETAPA 1: entrar -->
+    <section id="step-join" class="card" style="margin-top:40px;">
+      <h1 class="display" style="font-size:22px; margin-bottom:14px;">Entrar na sala</h1>
+      <label for="j-nome">Seu nome</label>
+      <input id="j-nome" placeholder="Ex: Maria" />
+      <label for="j-codigo">Código da sala</label>
+      <input id="j-codigo" placeholder="Ex: XK92P" style="text-transform:uppercase;" />
+      <button id="btn-join" style="width:100%; margin-top:16px;">Entrar</button>
+      <p id="join-error" class="muted" style="color:var(--coral); margin-top:10px; display:none;"></p>
+    </section>
+
+    <!-- ETAPA 2: aguardando -->
+    <section id="step-waiting" class="card center" style="display:none; margin-top:40px;">
+      <span class="pill waiting">Aguardando o host</span>
+      <h2 style="margin-top:14px; font-size:20px;" id="waiting-msg">O jogo vai começar em instantes...</h2>
+      <p class="muted" style="margin-top:10px;">Sua pontuação: <span id="my-score">0</span> pts</p>
+    </section>
+
+    <!-- ETAPA 3: desafio ativo -->
+    <section id="step-active" class="card" style="display:none; margin-top:24px;">
+      <div class="timer" id="p-timer">--</div>
+      <h2 style="margin-top:6px; font-size:19px;" id="p-pergunta"></h2>
+      <div id="p-area" style="margin-top:16px;"></div>
+    </section>
+
+    <!-- ETAPA 4: respondido, aguardando avaliação/próximo -->
+    <section id="step-sent" class="card center" style="display:none; margin-top:40px;">
+      <span class="pill live">Resposta enviada</span>
+      <h2 style="margin-top:14px; font-size:18px;">Aguardando o próximo desafio...</h2>
+      <p class="muted" style="margin-top:10px;">Sua pontuação: <span id="my-score-2">0</span> pts</p>
+    </section>
+
+    <!-- ETAPA 5: final -->
+    <section id="step-finished" class="card" style="display:none; margin-top:40px;">
+      <h2 class="center" style="font-size:20px;">🏁 Fim de jogo</h2>
+      <div id="final-leaderboard" style="margin-top:16px;"></div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const allSteps = ["step-join","step-waiting","step-active","step-sent","step-finished"];
+    function goTo(stepId) { allSteps.forEach(s => $(s).style.display = (s === stepId ? "block" : "none")); }
+
+    let room = null;
+    let player = null;
+    let currentChallenge = null;
+    let alreadyAnswered = false;
+    let timerInterval = null;
+    let roomChannel = null;
+    let playerChannel = null;
+
+    $("btn-join").addEventListener("click", async () => {
+      const nome = $("j-nome").value.trim();
+      const codigo = $("j-codigo").value.trim().toUpperCase();
+      if (!nome || !codigo) { showJoinError("Preencha seu nome e o código da sala."); return; }
+
+      const { data: roomData, error: roomErr } = await supa.from("rooms").select("*").eq("code", codigo).maybeSingle();
+      if (roomErr || !roomData) { showJoinError("Sala não encontrada. Confira o código."); return; }
+      room = roomData;
+
+      const { data: playerData, error: playerErr } = await supa.from("players")
+        .insert({ room_id: room.id, nome }).select().single();
+      if (playerErr) { showJoinError("Erro ao entrar: " + playerErr.message); return; }
+      player = playerData;
+
+      subscribeToRoom();
+      subscribeToPlayer();
+      handleRoomState();
+    });
+
+    function showJoinError(msg) {
+      $("join-error").textContent = msg;
+      $("join-error").style.display = "block";
+    }
+
+    function subscribeToRoom() {
+      roomChannel = supa.channel("room-" + room.id)
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${room.id}` },
+          (payload) => { room = payload.new; handleRoomState(); })
+        .subscribe();
+    }
+
+    function subscribeToPlayer() {
+      playerChannel = supa.channel("player-" + player.id)
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "players", filter: `id=eq.${player.id}` },
+          (payload) => {
+            player = payload.new;
+            $("my-score").textContent = player.pontuacao;
+            $("my-score-2").textContent = player.pontuacao;
+          })
+        .subscribe();
+    }
+
+    async function handleRoomState() {
+      if (room.status === "finished") {
+        clearInterval(timerInterval);
+        const { data: players } = await supa.from("players").select("*").eq("room_id", room.id).order("pontuacao", { ascending: false });
+        $("final-leaderboard").innerHTML = players.map((p, i) => `
+          <div class="leaderboard-row">
+            <span><span class="leaderboard-rank">${i+1}</span>${p.nome}${p.id === player.id ? " (você)" : ""}</span>
+            <span class="leaderboard-points">${p.pontuacao} pts</span>
+          </div>
+        `).join("");
+        goTo("step-finished");
+        return;
+      }
+
+      if (room.status === "active" && room.current_challenge_id) {
+        if (!currentChallenge || currentChallenge.id !== room.current_challenge_id) {
+          const { data: c } = await supa.from("challenges").select("*").eq("id", room.current_challenge_id).single();
+          currentChallenge = c;
+          const { data: existing } = await supa.from("answers").select("*")
+            .eq("challenge_id", c.id).eq("player_id", player.id).maybeSingle();
+          alreadyAnswered = !!existing;
+          renderChallenge();
+        }
+        return;
+      }
+
+      $("waiting-msg").textContent = "O jogo vai começar em instantes...";
+      goTo("step-waiting");
+    }
+
+    function renderChallenge() {
+      if (alreadyAnswered) {
+        goTo("step-sent");
+        return;
+      }
+      $("p-pergunta").textContent = currentChallenge.pergunta;
+      startTimer(room.current_challenge_ends_at);
+
+      if (currentChallenge.type === "multipla") {
+        $("p-area").innerHTML = (currentChallenge.opcoes || [])
+          .map(o => `<div class="option-btn" onclick="submitAnswer('${o.replace(/'/g, "\\'")}')">${o}</div>`).join("");
+      } else if (currentChallenge.type === "aberta") {
+        $("p-area").innerHTML = `
+          <textarea id="p-resposta" rows="3" placeholder="Digite sua resposta..."></textarea>
+          <button style="width:100%; margin-top:10px;" onclick="submitAnswer(document.getElementById('p-resposta').value)">Enviar resposta</button>
+        `;
+      } else {
+        $("p-area").innerHTML = `<button style="width:100%; padding:22px; font-size:18px;" onclick="submitAnswer('respondeu')">Responder!</button>`;
+      }
+      goTo("step-active");
+    }
+
+    function startTimer(endsAt) {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        const remaining = Math.round((new Date(endsAt) - new Date()) / 1000);
+        $("p-timer").textContent = fmtSeconds(Math.max(remaining, 0));
+        $("p-timer").className = "timer" + (remaining <= 5 ? " low" : "");
+        if (remaining <= 0) {
+          clearInterval(timerInterval);
+          if (!alreadyAnswered) { alreadyAnswered = true; goTo("step-sent"); }
+        }
+      }, 250);
+    }
+
+    async function submitAnswer(resposta) {
+      if (alreadyAnswered) return;
+      alreadyAnswered = true;
+      clearInterval(timerInterval);
+      const { error } = await supa.from("answers").insert({
+        challenge_id: currentChallenge.id,
+        player_id: player.id,
+        resposta,
+      });
+      if (error && error.code !== "23505") { alert("Erro ao enviar resposta: " + error.message); }
+      goTo("step-sent");
+    }
+  </script>
+</body>
+</html>

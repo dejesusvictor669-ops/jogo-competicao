@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Host — Jogo da Turma</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap wide">
+    <h1 class="display" style="font-size:26px; margin-bottom: 20px;">Painel do host</h1>
+
+    <!-- ETAPA 1: criar sala -->
+    <section id="step-create" class="card">
+      <h2 style="font-size:18px; margin-bottom:10px;">Criar sala</h2>
+      <label for="host-name">Seu nome (aparece como host)</label>
+      <input id="host-name" placeholder="Ex: Professor Ricardo" />
+      <button id="btn-create-room" style="margin-top:16px;">Criar sala</button>
+    </section>
+
+    <!-- ETAPA 2: montar desafios -->
+    <section id="step-build" class="card" style="display:none;">
+      <div class="row" style="align-items:center; margin-bottom:14px;">
+        <div>
+          <span class="pill">Código da sala</span>
+          <div class="room-code" id="room-code-small" style="font-size:32px; text-align:left;"></div>
+        </div>
+      </div>
+
+      <h2 style="font-size:16px; margin-bottom:10px;">Desafios (<span id="challenge-count">0</span>)</h2>
+      <div id="challenge-list"></div>
+
+      <hr style="border-color: rgba(255,255,255,0.08); margin: 18px 0;" />
+
+      <label for="c-type">Tipo de desafio</label>
+      <select id="c-type">
+        <option value="multipla">Múltipla escolha (pontua sozinho)</option>
+        <option value="aberta">Resposta aberta (você avalia)</option>
+        <option value="velocidade">Velocidade / quem responde primeiro (você avalia)</option>
+      </select>
+
+      <label for="c-pergunta">Pergunta / desafio</label>
+      <textarea id="c-pergunta" rows="2" placeholder="Ex: Capital da França?"></textarea>
+
+      <div id="c-opcoes-wrap">
+        <label>Opções (múltipla escolha)</label>
+        <input id="c-op-1" placeholder="Opção 1" style="margin-bottom:6px;" />
+        <input id="c-op-2" placeholder="Opção 2" style="margin-bottom:6px;" />
+        <input id="c-op-3" placeholder="Opção 3 (opcional)" style="margin-bottom:6px;" />
+        <input id="c-op-4" placeholder="Opção 4 (opcional)" style="margin-bottom:6px;" />
+        <label for="c-correta">Resposta correta (copie o texto exato de uma opção)</label>
+        <input id="c-correta" placeholder="Ex: Paris" />
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <div>
+          <label for="c-pontos">Pontos</label>
+          <input id="c-pontos" type="number" value="10" min="1" />
+        </div>
+        <div>
+          <label for="c-tempo">Tempo (segundos)</label>
+          <input id="c-tempo" type="number" value="30" min="5" />
+        </div>
+      </div>
+
+      <button id="btn-add-challenge" class="ghost" style="margin-top:16px;">+ Adicionar desafio</button>
+
+      <div style="margin-top:22px;">
+        <button id="btn-open-room" disabled style="width:100%;">Abrir sala para os alunos</button>
+        <p class="muted center" style="margin-top:8px;">Adicione pelo menos 1 desafio para abrir a sala.</p>
+      </div>
+    </section>
+
+    <!-- ETAPA 3: lobby -->
+    <section id="step-lobby" class="card" style="display:none;">
+      <p class="muted center">Passe esse código para a turma entrar:</p>
+      <div class="room-code" id="room-code-big"></div>
+      <p class="center" style="margin-top:6px;">
+        <span class="pill live" id="player-count-pill">0 jogadores na sala</span>
+      </p>
+      <div id="lobby-players" style="margin-top:16px;"></div>
+      <button id="btn-start-first" style="width:100%; margin-top:18px;">Iniciar desafio 1</button>
+    </section>
+
+    <!-- ETAPA 4: desafio ativo -->
+    <section id="step-active" class="card" style="display:none;">
+      <span class="pill live">Desafio <span id="active-index"></span> de <span id="active-total"></span></span>
+      <h2 style="margin-top:10px; font-size:20px;" id="active-pergunta"></h2>
+      <div class="timer" id="active-timer">--</div>
+      <div id="active-options" style="margin-top:10px;"></div>
+
+      <h3 style="font-size:14px; color: var(--muted); margin-top:20px;">Respostas recebidas</h3>
+      <div id="active-answers"></div>
+
+      <button id="btn-end-challenge" class="secondary" style="width:100%; margin-top:18px;">Encerrar desafio agora</button>
+    </section>
+
+    <!-- ETAPA 5: entre desafios -->
+    <section id="step-between" class="card" style="display:none;">
+      <h2 style="font-size:18px;">Desafio encerrado</h2>
+      <div id="between-leaderboard" style="margin: 14px 0;"></div>
+      <button id="btn-next-challenge" style="width:100%;">Próximo desafio</button>
+      <button id="btn-finish-game" class="secondary" style="width:100%; margin-top:10px;">Encerrar jogo</button>
+    </section>
+
+    <!-- ETAPA 6: final -->
+    <section id="step-finished" class="card" style="display:none;">
+      <h2 class="center" style="font-size:22px;">🏆 Resultado final</h2>
+      <div id="final-leaderboard" style="margin-top:16px;"></div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+  <script>
+    let room = null;
+    let challenges = [];
+    let activeChallenge = null;
+    let timerInterval = null;
+    let answersChannel = null;
+    let playersChannel = null;
+
+    const $ = (id) => document.getElementById(id);
+    const show = (id) => { $(id).style.display = "block"; };
+    const hide = (id) => { $(id).style.display = "none"; };
+    const allSteps = ["step-create","step-build","step-lobby","step-active","step-between","step-finished"];
+    function goTo(stepId) {
+      allSteps.forEach(s => s === stepId ? show(s) : hide(s));
+    }
+
+    // ---------- ETAPA 1: criar sala ----------
+    $("btn-create-room").addEventListener("click", async () => {
+      const hostName = $("host-name").value.trim() || "Host";
+      const code = generateRoomCode();
+      const { data, error } = await supa.from("rooms")
+        .insert({ code, host_name: hostName, status: "config" })
+        .select().single();
+      if (error) { alert("Erro ao criar sala: " + error.message); return; }
+      room = data;
+      $("room-code-small").textContent = room.code;
+      goTo("step-build");
+    });
+
+    // ---------- ETAPA 2: montar desafios ----------
+    $("c-type").addEventListener("change", () => {
+      $("c-opcoes-wrap").style.display = $("c-type").value === "multipla" ? "block" : "none";
+    });
+
+    $("btn-add-challenge").addEventListener("click", async () => {
+      const type = $("c-type").value;
+      const pergunta = $("c-pergunta").value.trim();
+      if (!pergunta) { alert("Escreva a pergunta/desafio."); return; }
+
+      let opcoes = null, correta = null;
+      if (type === "multipla") {
+        opcoes = [$("c-op-1").value, $("c-op-2").value, $("c-op-3").value, $("c-op-4").value]
+          .map(o => o.trim()).filter(Boolean);
+        correta = $("c-correta").value.trim();
+        if (opcoes.length < 2 || !correta) {
+          alert("Preencha pelo menos 2 opções e a resposta correta."); return;
+        }
+      }
+
+      const pontos = parseInt($("c-pontos").value, 10) || 10;
+      const tempo = parseInt($("c-tempo").value, 10) || 30;
+
+      const { data, error } = await supa.from("challenges").insert({
+        room_id: room.id,
+        order_index: challenges.length,
+        type, pergunta,
+        opcoes: opcoes,
+        resposta_correta: correta,
+        pontos, tempo_segundos: tempo,
+      }).select().single();
+
+      if (error) { alert("Erro ao salvar desafio: " + error.message); return; }
+      challenges.push(data);
+      renderChallengeList();
+
+      $("c-pergunta").value = ""; $("c-op-1").value = ""; $("c-op-2").value = "";
+      $("c-op-3").value = ""; $("c-op-4").value = ""; $("c-correta").value = "";
+    });
+
+    function renderChallengeList() {
+      $("challenge-count").textContent = challenges.length;
+      $("btn-open-room").disabled = challenges.length === 0;
+      $("challenge-list").innerHTML = challenges.map((c, i) => `
+        <div class="answer-row">
+          <span class="answer-text">${i+1}. [${c.type}] ${c.pergunta}</span>
+          <span class="pill">${c.pontos} pts · ${c.tempo_segundos}s</span>
+        </div>
+      `).join("");
+    }
+
+    $("btn-open-room").addEventListener("click", async () => {
+      await supa.from("rooms").update({ status: "lobby" }).eq("id", room.id);
+      room.status = "lobby";
+      $("room-code-big").textContent = room.code;
+      subscribeToPlayers();
+      goTo("step-lobby");
+    });
+
+    // ---------- ETAPA 3: lobby ----------
+    function subscribeToPlayers() {
+      playersChannel = supa.channel("players-" + room.id)
+        .on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `room_id=eq.${room.id}` },
+          () => refreshLobbyPlayers())
+        .subscribe();
+      refreshLobbyPlayers();
+    }
+
+    async function refreshLobbyPlayers() {
+      const { data } = await supa.from("players").select("*").eq("room_id", room.id).order("created_at");
+      $("player-count-pill").textContent = `${data.length} jogador${data.length === 1 ? "" : "es"} na sala`;
+      $("lobby-players").innerHTML = data.map(p => `<span class="pill" style="margin:3px;">${p.nome}</span>`).join("");
+      return data;
+    }
+
+    $("btn-start-first").addEventListener("click", () => startChallenge(0));
+
+    // ---------- ETAPA 4: desafio ativo ----------
+    async function startChallenge(index) {
+      const c = challenges[index];
+      const endsAt = new Date(Date.now() + c.tempo_segundos * 1000).toISOString();
+
+      await supa.from("challenges").update({ status: "ativo" }).eq("id", c.id);
+      await supa.from("rooms").update({
+        status: "active",
+        current_challenge_id: c.id,
+        current_challenge_ends_at: endsAt,
+      }).eq("id", room.id);
+
+      activeChallenge = { ...c, ends_at: endsAt, index };
+      renderActiveChallenge();
+      subscribeToAnswers(c.id);
+      startTimer(endsAt);
+      goTo("step-active");
+    }
+
+    function renderActiveChallenge() {
+      $("active-index").textContent = activeChallenge.index + 1;
+      $("active-total").textContent = challenges.length;
+      $("active-pergunta").textContent = activeChallenge.pergunta;
+      $("active-options").innerHTML = activeChallenge.type === "multipla"
+        ? (activeChallenge.opcoes || []).map(o => `<div class="option-btn">${o}</div>`).join("")
+        : `<p class="muted">${activeChallenge.type === "velocidade" ? "Quem responder primeiro pontua — avalie abaixo." : "Resposta aberta — avalie abaixo."}</p>`;
+      $("active-answers").innerHTML = "";
+    }
+
+    function startTimer(endsAt) {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        const remaining = Math.round((new Date(endsAt) - new Date()) / 1000);
+        $("active-timer").textContent = fmtSeconds(Math.max(remaining, 0));
+        $("active-timer").className = "timer" + (remaining <= 5 ? " low" : "");
+        if (remaining <= 0) {
+          clearInterval(timerInterval);
+          endChallenge();
+        }
+      }, 250);
+    }
+
+    function subscribeToAnswers(challengeId) {
+      if (answersChannel) supa.removeChannel(answersChannel);
+      answersChannel = supa.channel("answers-" + challengeId)
+        .on("postgres_changes", { event: "*", schema: "public", table: "answers", filter: `challenge_id=eq.${challengeId}` },
+          () => refreshActiveAnswers(challengeId))
+        .subscribe();
+      refreshActiveAnswers(challengeId);
+    }
+
+    async function refreshActiveAnswers(challengeId) {
+      const { data: answers } = await supa.from("answers").select("*").eq("challenge_id", challengeId).order("respondido_em");
+      const { data: players } = await supa.from("players").select("id, nome").eq("room_id", room.id);
+      const nameOf = (id) => (players.find(p => p.id === id) || {}).nome || "?";
+
+      if (activeChallenge.type === "multipla") {
+        $("active-answers").innerHTML = answers.map(a => `
+          <div class="answer-row">
+            <span class="answer-text">${nameOf(a.player_id)}: ${a.resposta}</span>
+            <span class="pill ${a.pontos_ganhos > 0 ? 'live' : ''}">${a.pontos_ganhos > 0 ? "✓ " + a.pontos_ganhos + " pts" : "✗ 0"}</span>
+          </div>
+        `).join("") || `<p class="muted">Ninguém respondeu ainda.</p>`;
+      } else {
+        $("active-answers").innerHTML = answers.map(a => `
+          <div class="answer-row">
+            <span class="answer-text">${nameOf(a.player_id)}${activeChallenge.type === 'aberta' ? ": " + (a.resposta || '') : ''}</span>
+            ${a.avaliado
+              ? `<span class="pill live">✓ ${a.pontos_ganhos} pts</span>`
+              : `<button class="ghost" style="padding:8px 12px;font-size:13px;" onclick="awardPoints('${a.id}', ${activeChallenge.pontos})">Dar ${activeChallenge.pontos} pts</button>`
+            }
+          </div>
+        `).join("") || `<p class="muted">Ninguém respondeu ainda.</p>`;
+      }
+    }
+
+    async function awardPoints(answerId, pontos) {
+      await supa.from("answers").update({ pontos_ganhos: pontos, avaliado: true }).eq("id", answerId);
+    }
+
+    $("btn-end-challenge").addEventListener("click", endChallenge);
+
+    async function endChallenge() {
+      clearInterval(timerInterval);
+      await supa.from("challenges").update({ status: "encerrado" }).eq("id", activeChallenge.id);
+      await renderBetweenScreen();
+      goTo("step-between");
+    }
+
+    async function renderBetweenScreen() {
+      const players = await refreshLobbyPlayers();
+      const sorted = [...players].sort((a,b) => b.pontuacao - a.pontuacao);
+      $("between-leaderboard").innerHTML = sorted.map((p, i) => `
+        <div class="leaderboard-row">
+          <span><span class="leaderboard-rank">${i+1}</span>${p.nome}</span>
+          <span class="leaderboard-points">${p.pontuacao} pts</span>
+        </div>
+      `).join("");
+      const hasNext = activeChallenge.index + 1 < challenges.length;
+      $("btn-next-challenge").style.display = hasNext ? "block" : "none";
+    }
+
+    $("btn-next-challenge").addEventListener("click", () => startChallenge(activeChallenge.index + 1));
+
+    $("btn-finish-game").addEventListener("click", async () => {
+      await supa.from("rooms").update({ status: "finished" }).eq("id", room.id);
+      const players = await refreshLobbyPlayers();
+      const sorted = [...players].sort((a,b) => b.pontuacao - a.pontuacao);
+      $("final-leaderboard").innerHTML = sorted.map((p, i) => `
+        <div class="leaderboard-row">
+          <span><span class="leaderboard-rank">${i+1}</span>${p.nome}</span>
+          <span class="leaderboard-points">${p.pontuacao} pts</span>
+        </div>
+      `).join("");
+      goTo("step-finished");
+    });
+  </script>
+</body>
+</html>
